@@ -19,9 +19,7 @@ const ProtectedRoute = ({ children }) => {
 
         // Parse the JSON data (and fix the missing parentheses bug)
         const data = await response.json();
-
-        console.log(data);
-        console.log(data.user) // Equivalent to your console.log(re)
+        // Equivalent to your console.log(re)
         setUser(data.user);
         console.log("done");
       } catch (error) {

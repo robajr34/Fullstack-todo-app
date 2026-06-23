@@ -1,11 +1,11 @@
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
-import All from "@/components/dashboard/All-Dashboard";
-import React, { Children } from "react";
+import SettingsPage from "@/components/layout/SettingsPage";
+import React from "react";
 
 const page = () => {
   return (
     <ProtectedRoute>
-      <All/>
+      <SettingsPage />
     </ProtectedRoute>
   );
 };

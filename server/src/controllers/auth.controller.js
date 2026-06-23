@@ -2,22 +2,37 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.schema");
 
-const signup = async (req, res) => {
+const signup = async (req, res, next) => {
   const { username, email, password } = req.body;
+
   try {
+    // Validation
     if (!username || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "All fields are required",
-      });
+      const error = new Error("All fields are required");
+      error.status = 400;
+      return next(error);
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      const error = new Error("Invalid email format");
+      error.status = 400;
+      return next(error);
+    }
+
+    if (password.length < 8) {
+      const error = new Error("Password must be at least 8 characters long");
+      error.status = 400;
+      return next(error);
     }
 
     const userExist = await User.findOne({ email });
+
     if (userExist) {
-      return res.status(409).json({
-        success: false,
-        message: "Email already exists",
-      });
+      const error = new Error("Email already exists");
+      error.status = 409;
+      return next(error);
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -28,7 +43,7 @@ const signup = async (req, res) => {
       password: hashedPassword,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       user: {
         id: user._id,
@@ -36,42 +51,47 @@ const signup = async (req, res) => {
         email: user.email,
       },
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+  } catch (err) {
+    return next(err);
   }
 };
-const login = async (req, res) => {
+
+const login = async (req, res, next) => {
   const { email, password } = req.body;
 
   try {
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "All fields are required",
-      });
+      const error = new Error("All fields are required");
+      error.status = 400;
+      return next(error);
     }
 
     const user = await User.findOne({ email });
+
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      const error = new Error("Invalid credentials");
+      error.status = 401;
+      return next(error);
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      const error = new Error("Invalid credentials");
+      error.status = 401;
+      return next(error);
     }
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+
+    const token = jwt.sign(
+      {
+        userId: user._id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      },
+    );
 
     res.cookie("token", token, {
       httpOnly: true,
@@ -80,7 +100,7 @@ const login = async (req, res) => {
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       user: {
         id: user._id,
@@ -88,41 +108,48 @@ const login = async (req, res) => {
         email: user.email,
       },
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+  } catch (err) {
+    return next(err);
   }
 };
+
 const logout = (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
-    secure: false,
-    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
   });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     message: "Logged out successfully",
   });
 };
 
-const dashboard = async (req, res) => {
-  const userId = req.user?.userId
-  try{
-    const user = await User.findById(userId).select("-password");
-    
-    res.status(200).json({
-      success: true,
-      user: user
-    })
-  }catch(error){
-    res.status(500).json({
-      success:false,
-      message:"server error"
-    })
-  }
-}
+const dashboard = async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
 
-module.exports = { login, signup, logout, dashboard };
+    const user = await User.findById(userId).select("-password");
+
+    if (!user) {
+      const error = new Error("User not found");
+      error.status = 404;
+      return next(error);
+    }
+
+    return res.status(200).json({
+      success: true,
+      user,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports = {
+  signup,
+  login,
+  logout,
+  dashboard,
+};
